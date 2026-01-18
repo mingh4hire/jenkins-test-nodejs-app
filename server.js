@@ -1,12 +1,15 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const cors = require('cors');
 const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://mongodb:27017/imagesdb';
 
-// Swagger Configuration
+// Middleware
+app.use(cors()); // Enable CORS for all routes
+app.use(express.json({ limit: '50mb' })); // Allow large base64 images
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
@@ -27,8 +30,6 @@ const swaggerOptions = {
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
-// Middleware
-app.use(express.json({ limit: '50mb' })); // Allow large base64 images
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // MongoDB Connection

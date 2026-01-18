@@ -2,9 +2,9 @@ pipeline {
     agent any
     
     environment {
-        IMAGE_NAME = "jenkins-test-nodejs-app"
+        BACKEND_IMAGE = "jenkins-test-nodejs-app-backend"
+        FRONTEND_IMAGE = "jenkins-test-nodejs-app-frontend"
         IMAGE_TAG = "${BUILD_NUMBER}"
-        CONTAINER_NAME = "nodejs-app-${BUILD_NUMBER}"
     }
     
     stages {
@@ -14,29 +14,44 @@ pipeline {
             }
         }
         
-        stage('Build Docker Image') {
+        stage('Build Docker Images') {
             steps {
-                echo 'Building Docker image...'
+                echo 'Building Docker images...'
                 script {
-                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-                    sh "docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest"
-                }
-            }
-        }
-        
-        stage('Deploy Container') {
+                    // Build backend image
+                    sh "docker build -t ${BACKEND_IMAGE}:${IMAGE_TAG} ."
+                    sh "docker tag ${BACKEND_IMAGE}:${IMAGE_TAG} ${BACKEND_IMAGE}:latest"
+                    
+                    // Build frontend image
+                    sh "docker build -t ${FRONTEND_IMAGE}:${IMAGE_TAG} ./frontend"
+                    sh "docker s') {
             steps {
-                echo 'Deploying container...'
+                echo 'Deploying containers...'
                 script {
-                    // Stop and remove old container if exists
+                    // Stop and remove old containers if exist
                     sh """
-                        docker ps -a | grep ${IMAGE_NAME} | awk '{print \$1}' | xargs -r docker stop || true
-                        docker ps -a | grep ${IMAGE_NAME} | awk '{print \$1}' | xargs -r docker rm || true
+                        docker stop ${BACKEND_IMAGE} ${FRONTEND_IMAGE} || true
+                        docker rm ${BACKEND_IMAGE} ${FRONTEND_IMAGE} || true
                     """
                     
-                    // Run new container
+                    // Run backend container
                     sh """
                         docker run -d \
+                            --name ${BACKEND_IMAGE} \
+                            --network jenkins_jenkins \
+                            --network-alias backend \
+                            -e MONGO_URI=mongodb://mongodb:27017/imagesdb \
+                            -p 3000:3000 \
+                            ${BACKEND_IMAGE}:latest
+                    """
+                    
+                    // Run frontend container
+                    sh """
+                        docker run -d \
+                            --name ${FRONTEND_IMAGE} \
+                            --network jenkins_jenkins \
+                            -p 80:80 \
+                            ${FRONTEND_IMAG
                             --name ${IMAGE_NAME} \
                             --network jenkins_jenkins \
                             -e MONGO_URI=mongodb://mongodb:27017/imagesdb \
@@ -52,12 +67,15 @@ pipeline {
                 echo 'Verifying deployment...'
                 script {
                     sleep 5
-                    sh 'curl -f http://localhost:3000/health || exit 1'
-                    echo 'Deployment verified successfully!'
-                }
-            }
+                  Backend API is running at: http://localhost:3000"
+            echo "Frontend is running at: http://localhost"
+            echo "Swagger API docs at: http://localhost:3000/api-docs"
         }
-    }
+        failure {
+            echo 'Pipeline failed!'
+            script {
+                sh "docker logs ${BACKEND_IMAGE} || true"
+                sh "docker logs ${FRONTEND_IMAG
     
     post {
         success {

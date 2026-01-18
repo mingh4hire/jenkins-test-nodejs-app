@@ -1,6 +1,10 @@
 pipeline {
     agent any
     
+    tools {
+        nodejs 'Node18'
+    }
+    
     environment {
         IMAGE_NAME = "jenkins-test-nodejs-app"
         IMAGE_TAG = "${BUILD_NUMBER}"

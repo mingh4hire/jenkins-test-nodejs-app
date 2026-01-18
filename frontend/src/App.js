@@ -10,7 +10,7 @@ function App() {
   const [message, setMessage] = useState('');
   const [images, setImages] = useState([]);
   const [imageDetails, setImageDetails] = useState({});
-  const [apiUrl] = useState(process.env.REACT_APP_API_URL || 'http://localhost:3000');
+  const [apiUrl] = useState('/api'); // Use nginx proxy instead of direct backend
 
   useEffect(() => {
     fetchImages();

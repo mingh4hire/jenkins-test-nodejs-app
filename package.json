@@ -1,0 +1,13 @@
+{
+  "name": "jenkins-test-app",
+  "version": "1.0.0",
+  "description": "Simple Node.js app to test Jenkins deployment",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

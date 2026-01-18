@@ -2,6 +2,16 @@
 
 A simple Node.js application with MongoDB for testing Jenkins CI/CD pipeline.
 
+## Quick Start - Run Locally
+
+Want to run without Jenkins? See [RUN_LOCALLY.md](RUN_LOCALLY.md)
+
+```bash
+docker-compose up -d --build
+```
+
+Then visit http://localhost
+
 ## Features
 
 - Express.js web server

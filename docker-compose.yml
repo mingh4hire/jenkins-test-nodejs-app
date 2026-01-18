@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: nodejs-backend
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/imagesdb
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongodb
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: react-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7
+    container_name: app-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - app_mongodb_data:/data/db
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  app_mongodb_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

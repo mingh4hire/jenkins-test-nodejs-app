@@ -142,7 +142,21 @@ function App() {
             onClick={handleUpload}
             disabled={!selectedFile || uploading}
             className="upload-button"
-          >{
+          >
+            {uploading ? 'Uploading...' : 'Upload Image'}
+          </button>
+
+          {message && (
+            <div className={`message ${message.includes('✅') ? 'success' : 'error'}`}>
+              {message}
+            </div>
+          )}
+        </div>
+
+        <div className="images-section">
+          <h2>Uploaded Images ({images.length})</h2>
+          <div className="images-grid">
+            {images.map((image) => {
               const detail = imageDetails[image._id];
               const imageSrc = detail ? `data:${detail.contentType};base64,${detail.data}` : null;
               
@@ -166,21 +180,7 @@ function App() {
                   </a>
                 </div>
               );
-            }   <h4>{image.name}</h4>
-                <p className="image-meta">
-                  Type: {image.contentType}<br />
-                  Uploaded: {new Date(image.createdAt).toLocaleString()}
-                </p>
-                <a 
-                  href={`${apiUrl}/images/${image._id}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="view-link"
-                >
-                  View Full Image
-                </a>
-              </div>
-            ))}
+            })}
           </div>
         </div>
       </main>

@@ -38,6 +38,8 @@ pipeline {
                     sh """
                         docker run -d \
                             --name ${IMAGE_NAME} \
+                            --network jenkins_jenkins \
+                            -e MONGO_URI=mongodb://mongodb:27017/imagesdb \
                             -p 3000:3000 \
                             ${IMAGE_NAME}:latest
                     """

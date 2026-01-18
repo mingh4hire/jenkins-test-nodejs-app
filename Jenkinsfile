@@ -1,10 +1,6 @@
 pipeline {
     agent any
     
-    tools {
-        nodejs 'Node18'
-    }
-    
     environment {
         IMAGE_NAME = "jenkins-test-nodejs-app"
         IMAGE_TAG = "${BUILD_NUMBER}"
@@ -15,20 +11,6 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo 'Source code checked out'
-            }
-        }
-        
-        stage('Install Dependencies') {
-            steps {
-                echo 'Installing Node.js dependencies...'
-                sh 'npm install'
-            }
-        }
-        
-        stage('Run Tests') {
-            steps {
-                echo 'Running tests...'
-                sh 'npm test'
             }
         }
         

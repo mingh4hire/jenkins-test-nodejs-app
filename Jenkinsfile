@@ -33,10 +33,18 @@ pipeline {
             steps {
                 echo 'Deploying containers...'
                 script {
-                    // Stop and remove old containers if exist
+                    // Stop and remove old containers by name (if exist)
                     sh """
-                        docker stop ${BACKEND_IMAGE} ${FRONTEND_IMAGE} || true
-                        docker rm ${BACKEND_IMAGE} ${FRONTEND_IMAGE} || true
+                        docker stop ${BACKEND_IMAGE} ${FRONTEND_IMAGE} jenkins-test-nodejs-app || true
+                        docker rm ${BACKEND_IMAGE} ${FRONTEND_IMAGE} jenkins-test-nodejs-app || true
+                    """
+                    
+                    // Also stop any containers using the ports
+                    sh """
+                        docker ps --filter "publish=3000" -q | xargs -r docker stop || true
+                        docker ps --filter "publish=80" -q | xargs -r docker stop || true
+                        docker ps -a --filter "publish=3000" -q | xargs -r docker rm || true
+                        docker ps -a --filter "publish=80" -q | xargs -r docker rm || true
                     """
                     
                     // Run backend container

@@ -9,6 +9,7 @@ function App() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [images, setImages] = useState([]);
+  const [imageDetails, setImageDetails] = useState({});
   const [apiUrl] = useState(process.env.REACT_APP_API_URL || 'http://localhost:3000');
 
   useEffect(() => {
@@ -18,7 +19,21 @@ function App() {
   const fetchImages = async () => {
     try {
       const response = await axios.get(`${apiUrl}/images`);
-      setImages(response.data.images || []);
+      const imagesList = response.data.images || [];
+      setImages(imagesList);
+      
+      // Fetch full details for each image (including base64 data)
+      for (const img of imagesList) {
+        try {
+          const detailResponse = await axios.get(`${apiUrl}/images/${img._id}`);
+          setImageDetails(prev => ({
+            ...prev,
+            [img._id]: detailResponse.data
+          }));
+        } catch (error) {
+          console.error(`Error fetching image ${img._id}:`, error);
+        }
+      }
     } catch (error) {
       console.error('Error fetching images:', error);
     }
@@ -127,23 +142,31 @@ function App() {
             onClick={handleUpload}
             disabled={!selectedFile || uploading}
             className="upload-button"
-          >
-            {uploading ? 'Uploading...' : 'Upload Image'}
-          </button>
-
-          {message && (
-            <div className={`message ${message.includes('✅') ? 'success' : 'error'}`}>
-              {message}
-            </div>
-          )}
-        </div>
-
-        <div className="images-section">
-          <h2>Uploaded Images ({images.length})</h2>
-          <div className="images-grid">
-            {images.map((image) => (
-              <div key={image._id} className="image-card">
-                <h4>{image.name}</h4>
+          >{
+              const detail = imageDetails[image._id];
+              const imageSrc = detail ? `data:${detail.contentType};base64,${detail.data}` : null;
+              
+              return (
+                <div key={image._id} className="image-card">
+                  {imageSrc && (
+                    <img src={imageSrc} alt={image.name} className="thumbnail-image" />
+                  )}
+                  <h4>{image.name}</h4>
+                  <p className="image-meta">
+                    Type: {image.contentType}<br />
+                    Uploaded: {new Date(image.createdAt).toLocaleString()}
+                  </p>
+                  <a 
+                    href={`${apiUrl}/images/${image._id}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="view-link"
+                  >
+                    View JSON
+                  </a>
+                </div>
+              );
+            }   <h4>{image.name}</h4>
                 <p className="image-meta">
                   Type: {image.contentType}<br />
                   Uploaded: {new Date(image.createdAt).toLocaleString()}

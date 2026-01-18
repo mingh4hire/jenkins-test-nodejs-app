@@ -24,7 +24,12 @@ pipeline {
                     
                     // Build frontend image
                     sh "docker build -t ${FRONTEND_IMAGE}:${IMAGE_TAG} ./frontend"
-                    sh "docker s') {
+                    sh "docker tag ${FRONTEND_IMAGE}:${IMAGE_TAG} ${FRONTEND_IMAGE}:latest"
+                }
+            }
+        }
+        
+        stage('Deploy Containers') {
             steps {
                 echo 'Deploying containers...'
                 script {
@@ -51,12 +56,7 @@ pipeline {
                             --name ${FRONTEND_IMAGE} \
                             --network jenkins_jenkins \
                             -p 80:80 \
-                            ${FRONTEND_IMAG
-                            --name ${IMAGE_NAME} \
-                            --network jenkins_jenkins \
-                            -e MONGO_URI=mongodb://mongodb:27017/imagesdb \
-                            -p 3000:3000 \
-                            ${IMAGE_NAME}:latest
+                            ${FRONTEND_IMAGE}:latest
                     """
                 }
             }
@@ -67,7 +67,17 @@ pipeline {
                 echo 'Verifying deployment...'
                 script {
                     sleep 5
-                  Backend API is running at: http://localhost:3000"
+                    sh 'curl -f http://localhost:3000/health || exit 1'
+                    echo 'Deployment verified successfully!'
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+            echo "Backend API is running at: http://localhost:3000"
             echo "Frontend is running at: http://localhost"
             echo "Swagger API docs at: http://localhost:3000/api-docs"
         }
@@ -75,17 +85,7 @@ pipeline {
             echo 'Pipeline failed!'
             script {
                 sh "docker logs ${BACKEND_IMAGE} || true"
-                sh "docker logs ${FRONTEND_IMAG
-    
-    post {
-        success {
-            echo 'Pipeline completed successfully!'
-            echo "App is running at: http://localhost:3000"
-        }
-        failure {
-            echo 'Pipeline failed!'
-            script {
-                sh "docker logs ${IMAGE_NAME} || true"
+                sh "docker logs ${FRONTEND_IMAGE} || true"
             }
         }
     }

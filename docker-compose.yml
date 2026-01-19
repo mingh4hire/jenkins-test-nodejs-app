@@ -4,8 +4,10 @@ services:
   backend:
     build: .
     container_name: nodejs-backend
+    env_file:
+      - .env
     environment:
-      - MONGO_URI=mongodb://mongodb:27017/imagesdb
+      - MONGO_URI=mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DATABASE}?authSource=admin
       - PORT=3000
     ports:
       - "3000:3000"
@@ -29,8 +31,12 @@ services:
   mongodb:
     image: mongo:7
     container_name: app-mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD}
+      - MONGO_INITDB_DATABASE=${MONGO_DATABASE}
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
       - app_mongodb_data:/data/db
     networks:

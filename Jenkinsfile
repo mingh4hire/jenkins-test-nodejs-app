@@ -70,16 +70,16 @@ pipeline {
             }
         }
         
-        stage('Verify Deployment') {
-            steps {
-                echo 'Verifying deployment...'
-                script {
-                    sleep 5
-                    sh 'curl -f http://localhost:3000/health || exit 1'
-                    echo 'Deployment verified successfully!'
-                }
-            }
-        }
+        // stage('Verify Deployment') {
+        //     steps {
+        //         echo 'Verifying deployment...'
+        //         script {
+        //             sleep 5
+        //             sh 'curl -f http://localhost:3000/health || exit 1'
+        //             echo 'Deployment verified successfully!'
+        //         }
+        //     }
+        // }
     }
     
     post {

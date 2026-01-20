@@ -54,6 +54,7 @@ pipeline {
                             --name ${BACKEND_IMAGE} \
                             --network jenkins_jenkins \
                             --network-alias backend \
+                            -e JWT_SECRET=${JWT_SECRET} \
                             -e MONGO_URI=mongodb://mongodb:27017/imagesdb \
                             -p 3000:3000 \
                             ${BACKEND_IMAGE}:latest

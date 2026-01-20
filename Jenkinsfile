@@ -5,6 +5,7 @@ pipeline {
         BACKEND_IMAGE = "jenkins-test-nodejs-app-backend"
         FRONTEND_IMAGE = "jenkins-test-nodejs-app-frontend"
         IMAGE_TAG = "${BUILD_NUMBER}"
+        JWT_SECRET = credentials('JWT_SECRET')    
     }
     
     stages {

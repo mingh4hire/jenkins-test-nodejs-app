@@ -150,15 +150,16 @@ function App() {
       {!capturedImage ? (
         <div 
           className="camera-container"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
         >
           <video
             ref={videoRef}
             autoPlay
             playsInline
             className="video-feed"
+                      onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+
           />
           
           <div className="controls">

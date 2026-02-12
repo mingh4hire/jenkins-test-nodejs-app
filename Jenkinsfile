@@ -44,8 +44,10 @@ pipeline {
                     sh """
                         docker ps --filter "publish=3000" -q | xargs -r docker stop || true
                         docker ps --filter "publish=80" -q | xargs -r docker stop || true
+                        docker ps --filter "publish=443" -q | xargs -r docker stop || true
                         docker ps -a --filter "publish=3000" -q | xargs -r docker rm || true
                         docker ps -a --filter "publish=80" -q | xargs -r docker rm || true
+                        docker ps -a --filter "publish=443" -q | xargs -r docker rm || true
                     """
                     
                     // Run backend container
@@ -66,6 +68,7 @@ pipeline {
                             --name ${FRONTEND_IMAGE} \
                             --network jenkins_jenkins \
                             -p 80:80 \
+                            -p 443:443 \
                             ${FRONTEND_IMAGE}:latest
                     """
                 }
@@ -88,7 +91,7 @@ pipeline {
         success {
             echo 'Pipeline completed successfully!'
             echo "Backend API is running at: http://localhost:3000"
-            echo "Frontend is running at: http://localhost"
+            echo "Frontend is running at: https://localhost (HTTPS enabled)"
             echo "Swagger API docs at: http://localhost:3000/api-docs"
         }
         failure {

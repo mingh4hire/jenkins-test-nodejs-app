@@ -1,473 +1,202 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 
 function App() {
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [imageName, setImageName] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [images, setImages] = useState([]);
-  const [imageDetails, setImageDetails] = useState({});
-  const [apiUrl] = useState('/api'); // Use nginx proxy instead of direct backend
-  
-  // Authentication state
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [email, setEmail] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [isForgotPassword, setIsForgotPassword] = useState(false);
-  const [isResetPassword, setIsResetPassword] = useState(false);
-  const [resetToken, setResetToken] = useState('');
-  const [currentUser, setCurrentUser] = useState(localStorage.getItem('username'));
-  const [token, setToken] = useState(localStorage.getItem('authToken'));
-  const [showLogin, setShowLogin] = useState(!localStorage.getItem('authToken'));
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [stream, setStream] = useState(null);
+  const [capturedImage, setCapturedImage] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [facingMode, setFacingMode] = useState('environment');
+  const [error, setError] = useState(null);
+
+  // Pinch to zoom state
+  const [isPinching, setIsPinching] = useState(false);
+  const [initialDistance, setInitialDistance] = useState(0);
+  const [initialZoom, setInitialZoom] = useState(1);
 
   useEffect(() => {
-    // Check if token exists in localStorage
-    const savedToken = localStorage.getItem('authToken');
-    const savedUsername = localStorage.getItem('username');
-    if (savedToken) {
-      setToken(savedToken);
-      setCurrentUser(savedUsername);
-      setIsAuthenticated(true);
-      setShowLogin(false);
-    }
-    
-    // Check for reset token in URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const tokenFromUrl = urlParams.get('token');
-    if (tokenFromUrl) {
-      setResetToken(tokenFromUrl);
-      setIsResetPassword(true);
-      setShowLogin(true);
-    }
-    
-    fetchImages();
-  }, []);
+    startCamera();
+    return () => {
+      stopCamera();
+    };
+  }, [facingMode]);
 
-  const handleLogin = async () => {
-    if (!username || !password) {
-      setMessage('❌ Please enter username and password');
-      return;
-    }
-
+  const startCamera = async () => {
     try {
-      const response = await axios.post(`${apiUrl}/auth/login`, { username, password });
-      const { token: newToken, username: loggedInUser } = response.data;
-      
-      setToken(newToken);
-      setCurrentUser(loggedInUser);
-      setIsAuthenticated(true);
-      setShowLogin(false);
-      localStorage.setItem('authToken', newToken);
-      localStorage.setItem('username', loggedInUser);
-      setMessage('✅ Login successful!');
-      setPassword(''); // Clear password
-      setUsername('');
-    } catch (error) {
-      setMessage(`❌ Login failed: ${error.response?.data?.error || error.message}`);
-    }
-  };
-
-  const handleRegister = async () => {
-    if (!username || !email || !password) {
-      setMessage('❌ Please fill in all fields');
-      return;
-    }
-
-    try {
-      const response = await axios.post(`${apiUrl}/auth/register`, { username, email, password });
-      const { token: newToken, username: loggedInUser } = response.data;
-      
-      setToken(newToken);
-      setCurrentUser(loggedInUser);
-      setIsAuthenticated(true);
-      setShowLogin(false);
-      localStorage.setItem('authToken', newToken);
-      localStorage.setItem('username', loggedInUser);
-      setMessage('✅ Registration successful!');
-      setPassword(''); // Clear password
-      setEmail('');
-      setUsername('');
-    } catch (error) {
-      setMessage(`❌ Registration failed: ${error.response?.data?.error || error.message}`);
-    }
-  };
-
-  const handleLogout = () => {
-    setToken(null);
-    setCurrentUser(null);
-    setIsAuthenticated(false);
-    setShowLogin(true);
-    setUsername('');
-    setPassword('');
-    setEmail('');
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('username');
-    setMessage('👋 Logged out');
-  };
-
-  const handleForgotPassword = async () => {
-    if (!email) {
-      setMessage('❌ Please enter your email');
-      return;
-    }
-
-    try {
-      await axios.post(`${apiUrl}/auth/forgot-password`, { email });
-      setMessage('✅ If that email exists, a reset link has been sent. Check your email (or console in dev mode).');
-    } catch (error) {
-      setMessage(`❌ Error: ${error.response?.data?.error || error.message}`);
-    }
-  };
-
-  const handleResetPassword = async () => {
-    if (!password || !resetToken) {
-      setMessage('❌ Please enter a new password');
-      return;
-    }
-
-    try {
-      await axios.post(`${apiUrl}/auth/reset-password`, { token: resetToken, password });
-      setMessage('✅ Password reset successful! You can now login.');
-      setPassword('');
-      setResetToken('');
-      setIsResetPassword(false);
-      setIsForgotPassword(false);
-      // Clear URL parameters
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } catch (error) {
-      setMessage(`❌ Reset failed: ${error.response?.data?.error || error.message}`);
-    }
-  };
-
-  const fetchImages = async () => {
-    try {
-      const response = await axios.get(`${apiUrl}/images`);
-      const imagesList = response.data.images || [];
-      setImages(imagesList);
-      
-      // Fetch full details for each image (including base64 data)
-      for (const img of imagesList) {
-        try {
-          const detailResponse = await axios.get(`${apiUrl}/images/${img._id}`);
-          setImageDetails(prev => ({
-            ...prev,
-            [img._id]: detailResponse.data
-          }));
-        } catch (error) {
-          console.error(`Error fetching image ${img._id}:`, error);
+      setError(null);
+      const constraints = {
+        video: {
+          facingMode: facingMode,
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
         }
+      };
+
+      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      setStream(mediaStream);
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
       }
-    } catch (error) {
-      console.error('Error fetching images:', error);
-    }
-  };
 
-  const handleFileChange = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-      setImageName(file.name.split('.')[0]);
+      // Get video track for zoom capabilities
+      const track = mediaStream.getVideoTracks()[0];
+      const capabilities = track.getCapabilities();
       
-      // Create preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+      if (capabilities.zoom) {
+        const settings = track.getSettings();
+        setZoom(settings.zoom || 1);
+      }
+    } catch (err) {
+      console.error('Error accessing camera:', err);
+      setError('Failed to access camera. Please grant camera permissions.');
     }
   };
 
-  const handleUpload = async () => {
-    if (!selectedFile || !imageName) {
-      setMessage('Please select a file and enter a name');
-      return;
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
     }
+  };
 
-    if (!token) {
-      setMessage('❌ Please login first to upload images');
-      setShowLogin(true);
-      return;
+  const applyZoom = async (newZoom) => {
+    if (!stream) return;
+
+    const track = stream.getVideoTracks()[0];
+    const capabilities = track.getCapabilities();
+
+    if (capabilities.zoom) {
+      const minZoom = capabilities.zoom.min || 1;
+      const maxZoom = capabilities.zoom.max || 10;
+      const clampedZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
+
+      try {
+        await track.applyConstraints({
+          advanced: [{ zoom: clampedZoom }]
+        });
+        setZoom(clampedZoom);
+      } catch (err) {
+        console.error('Error applying zoom:', err);
+      }
     }
+  };
 
-    setUploading(true);
-    setMessage('');
-
-    try {
-      // Convert file to base64
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64String = reader.result.split(',')[1]; // Remove data:image/jpeg;base64, prefix
-        
-        const payload = {
-          name: imageName,
-          data: base64String,
-          contentType: selectedFile.type
-        };
-
-        try {
-          const response = await axios.post(`${apiUrl}/images`, payload, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          setMessage(`✅ Image uploaded successfully! ID: ${response.data.id}`);
-          setSelectedFile(null);
-          setPreview(null);
-          setImageName('');
-          fetchImages();
-        } catch (error) {
-          if (error.response?.status === 401 || error.response?.status === 403) {
-            setMessage(`❌ Authentication failed. Please login again.`);
-            handleLogout();
-          } else {
-            setMessage(`❌ Upload failed: ${error.response?.data?.error || error.message}`);
-          }
-        } finally {
-          setUploading(false);
-        }
-      };
-      reader.readAsDataURL(selectedFile);
-    } catch (error) {
-      setMessage(`❌ Error: ${error.message}`);
-      setUploading(false);
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      setIsPinching(true);
+      const distance = getDistance(e.touches[0], e.touches[1]);
+      setInitialDistance(distance);
+      setInitialZoom(zoom);
     }
+  };
+
+  const handleTouchMove = (e) => {
+    if (isPinching && e.touches.length === 2) {
+      const currentDistance = getDistance(e.touches[0], e.touches[1]);
+      const scale = currentDistance / initialDistance;
+      const newZoom = initialZoom * scale;
+      applyZoom(newZoom);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsPinching(false);
+  };
+
+  const getDistance = (touch1, touch2) => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    const imageDataUrl = canvas.toDataURL('image/png');
+    setCapturedImage(imageDataUrl);
+  };
+
+  const downloadPhoto = () => {
+    if (!capturedImage) return;
+
+    const link = document.createElement('a');
+    link.href = capturedImage;
+    link.download = `photo_${Date.now()}.png`;
+    link.click();
+  };
+
+  const retakePhoto = () => {
+    setCapturedImage(null);
+  };
+
+  const switchCamera = () => {
+    setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
   };
 
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>📷 Image Uploader</h1>
-        <p>Upload and store images in MongoDB</p>
-        {isAuthenticated && (
-          <div className="user-info">
-            <span>👤 {currentUser}</span>
-            <button onClick={handleLogout} className="logout-button">
-              Logout
-            </button>
-          </div>
-        )}
-      </header>
-
-      <main className="App-main">
-        {showLogin ? (
-          <div className="login-section">
-            {isResetPassword ? (
-              <>
-                <h2>🔑 Reset Password</h2>
-                <p>Enter your new password</p>
-                <div className="form-group">
-                  <label htmlFor="password">New Password:</label>
-                  <input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter new password"
-                    className="text-input"
-                    onKeyPress={(e) => e.key === 'Enter' && handleResetPassword()}
-                  />
-                </div>
-                <div className="password-requirements">
-                  <small>Password must contain:</small>
-                  <ul>
-                    <li>At least 8 characters</li>
-                    <li>One uppercase letter (A-Z)</li>
-                    <li>One lowercase letter (a-z)</li>
-                    <li>One number (0-9)</li>
-                  </ul>
-                </div>
-                <button onClick={handleResetPassword} className="login-button">
-                  Reset Password
-                </button>
-                <button onClick={() => { setIsResetPassword(false); setResetToken(''); window.history.replaceState({}, document.title, window.location.pathname); }} className="toggle-auth-button">
-                  Back to Login
-                </button>
-              </>
-            ) : isForgotPassword ? (
-              <>
-                <h2>🔒 Forgot Password</h2>
-                <p>Enter your email to receive a reset link</p>
-                <div className="form-group">
-                  <label htmlFor="email">Email:</label>
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter your email"
-                    className="text-input"
-                    onKeyPress={(e) => e.key === 'Enter' && handleForgotPassword()}
-                  />
-                </div>
-                <button onClick={handleForgotPassword} className="login-button">
-                  Send Reset Link
-                </button>
-                <button onClick={() => { setIsForgotPassword(false); setEmail(''); }} className="toggle-auth-button">
-                  Back to Login
-                </button>
-              </>
-            ) : (
-              <>
-                <h2>🔐 {isRegistering ? 'Create Account' : 'Login Required'}</h2>
-                <p>{isRegistering ? 'Register to start uploading images' : 'Please login to upload images'}</p>
-                <div className="form-group">
-                  <label htmlFor="username">Username:</label>
-                  <input
-                    id="username"
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Enter username"
-                    className="text-input"
-                    onKeyPress={(e) => e.key === 'Enter' && (isRegistering ? handleRegister() : handleLogin())}
-                  />
-                </div>
-            {isRegistering && (
-              <div className="form-group">
-                <label htmlFor="email">Email:</label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter email"
-                  className="text-input"
-                  onKeyPress={(e) => e.key === 'Enter' && handleRegister()}
-                />
-              </div>
-            )}
-            <div className="form-group">
-              <label htmlFor="password">Password:</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
-                className="text-input"
-                onKeyPress={(e) => e.key === 'Enter' && (isRegistering ? handleRegister() : handleLogin())}
-              />
-            </div>
-            {isRegistering && (
-              <div className="password-requirements">
-                <small>Password must contain:</small>
-                <ul>
-                  <li>At least 8 characters</li>
-                  <li>One uppercase letter (A-Z)</li>
-                  <li>One lowercase letter (a-z)</li>
-                  <li>One number (0-9)</li>
-                </ul>
-              </div>
-            )}
-            <button onClick={isRegistering ? handleRegister : handleLogin} className="login-button">
-              {isRegistering ? 'Register' : 'Login'}
-            </button>
-            {!isRegistering && (
-              <button onClick={() => setIsForgotPassword(true)} className="forgot-password-button">
-                Forgot Password?
-              </button>
-            )}
-            <button onClick={() => setIsRegistering(!isRegistering)} className="toggle-auth-button">
-              {isRegistering ? 'Already have an account? Login' : 'Need an account? Register'}
-            </button>
-          </>
-            )}
-          </div>
-        ) : (
-          <div className="upload-section">
-            <h2>Upload New Image</h2>
-            <div className="auth-status">
-              ✅ Authenticated
-            </div>
+    <div className="app">
+      {error && <div className="error">{error}</div>}
+      
+      {!capturedImage ? (
+        <div 
+          className="camera-container"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            className="video-feed"
+          />
           
-          <div className="form-group">
-            <label htmlFor="file-input" className="file-label">
-              Choose Image
-            </label>
-            <input
-              id="file-input"
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="file-input"
-            />
-          </div>
-
-          {preview && (
-            <div className="preview-section">
-              <h3>Preview:</h3>
-              <img src={preview} alt="Preview" className="preview-image" />
+          <div className="controls">
+            <button className="control-btn" onClick={switchCamera}>
+              🔄
+            </button>
+            
+            <button className="capture-btn" onClick={capturePhoto}>
+              📷
+            </button>
+            
+            <div className="zoom-controls">
+              <button className="zoom-btn" onClick={() => applyZoom(zoom - 0.5)}>
+                -
+              </button>
+              <span className="zoom-level">{zoom.toFixed(1)}x</span>
+              <button className="zoom-btn" onClick={() => applyZoom(zoom + 0.5)}>
+                +
+              </button>
             </div>
-          )}
-
-          <div className="form-group">
-            <label htmlFor="image-name">Image Name:</label>
-            <input
-              id="image-name"
-              type="text"
-              value={imageName}
-              onChange={(e) => setImageName(e.target.value)}
-              placeholder="Enter image name"
-              className="text-input"
-            />
-          </div>
-
-          <button
-            onClick={handleUpload}
-            disabled={!selectedFile || uploading}
-            className="upload-button"
-          >
-            {uploading ? 'Uploading...' : 'Upload Image'}
-          </button>
-
-          {message && (
-            <div className={`message ${message.includes('✅') ? 'success' : 'error'}`}>
-              {message}
-            </div>
-          )}
-        </div>
-        )}
-
-        <div className="images-section">
-          <h2>Uploaded Images ({images.length})</h2>
-          <div className="images-grid">
-            {images.map((image) => {
-              const detail = imageDetails[image._id];
-              const imageSrc = detail ? `data:${detail.contentType};base64,${detail.data}` : null;
-              
-              return (
-                <div key={image._id} className="image-card">
-                  {imageSrc && (
-                    <img src={imageSrc} alt={image.name} className="thumbnail-image" />
-                  )}
-                  <h4>{image.name}</h4>
-                  <p className="image-meta">
-                    Type: {image.contentType}<br />
-                    Uploaded: {new Date(image.createdAt).toLocaleString()}
-                  </p>
-                  <a 
-                    href={`${apiUrl}/images/${image._id}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="view-link"
-                  >
-                    View JSON
-                  </a>
-                </div>
-              );
-            })}
           </div>
         </div>
-      </main>
+      ) : (
+        <div className="preview-container">
+          <img src={capturedImage} alt="Captured" className="captured-image" />
+          
+          <div className="preview-controls">
+            <button className="preview-btn" onClick={retakePhoto}>
+              Retake
+            </button>
+            <button className="preview-btn download" onClick={downloadPhoto}>
+              Download
+            </button>
+          </div>
+        </div>
+      )}
 
-      <footer className="App-footer">
-        <p>Powered by React + Node.js + MongoDB + Jenkins</p>
-      </footer>
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
     </div>
   );
 }

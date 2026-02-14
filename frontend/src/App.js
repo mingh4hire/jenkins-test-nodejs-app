@@ -1,206 +1,249 @@
-import React, { useState, useRef, useEffect } from 'react';
-import './App.css';
+import React, { useEffect, useRef, useState } from "react";
+import "./App3.css";
 
-function App() {
+const OPENCV_SRC = "https://docs.opencv.org/4.x/opencv.js";
+
+function loadOpenCv() {
+  return new Promise((resolve, reject) => {
+    if (window.cv && window.cv.Mat) {
+      resolve(window.cv);
+      return;
+    }
+
+    const existing = document.querySelector(`script[src="${OPENCV_SRC}"]`);
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.cv));
+      existing.addEventListener("error", reject);
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = OPENCV_SRC;
+    script.async = true;
+    script.onload = () => resolve(window.cv);
+    script.onerror = reject;
+    document.body.appendChild(script);
+  });
+}
+
+function rgbToHex(r, g, b) {
+  const toHex = (v) => v.toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+export default function App() {
   const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const [stream, setStream] = useState(null);
-  const [capturedImage, setCapturedImage] = useState(null);
-  const [zoom, setZoom] = useState(1);
-  const [facingMode, setFacingMode] = useState('environment');
-  const [error, setError] = useState(null);
-
-  // Pinch to zoom state
-  const [isPinching, setIsPinching] = useState(false);
-  const [initialDistance, setInitialDistance] = useState(0);
-  const [initialZoom, setInitialZoom] = useState(1);
+  const overlayRef = useRef(null);
+  const rafRef = useRef(null);
+  const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    startCamera();
-    return () => {
-      stopCamera();
-    };
-  }, [facingMode]);
+    let stream;
+    let isMounted = true;
 
-  const startCamera = async () => {
-    try {
-      setError(null);
-      const constraints = {
-        video: {
-          facingMode: facingMode,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      };
-
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      setStream(mediaStream);
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-
-      // Get video track for zoom capabilities
-      const track = mediaStream.getVideoTracks()[0];
-      const capabilities = track.getCapabilities();
-      
-      if (capabilities.zoom) {
-        const settings = track.getSettings();
-        setZoom(settings.zoom || 1);
-      }
-    } catch (err) {
-      console.error('Error accessing camera:', err);
-      setError('Failed to access camera. Please grant camera permissions.');
-    }
-  };
-
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-    }
-  };
-
-  const applyZoom = async (newZoom) => {
-    if (!stream) return;
-
-    const track = stream.getVideoTracks()[0];
-    const capabilities = track.getCapabilities();
-
-    if (capabilities.zoom) {
-      const minZoom = capabilities.zoom.min || 1;
-      const maxZoom = capabilities.zoom.max || 10;
-      const clampedZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
-
+    const startCamera = async () => {
       try {
-        await track.applyConstraints({
-          advanced: [{ zoom: clampedZoom }]
-        });
-        setZoom(clampedZoom);
+        const constraints = {
+          audio: false,
+          video: {
+            facingMode: { exact: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        };
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (err) {
+          // fallback if exact constraint fails
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: "environment" }
+          });
+        }
+
+        if (!isMounted) return;
+        const video = videoRef.current;
+        if (!video) return;
+        video.srcObject = stream;
+        await video.play();
       } catch (err) {
-        console.error('Error applying zoom:', err);
+        setError("Camera access failed. Please allow camera permissions.");
       }
-    }
-  };
+    };
 
-  const handleTouchStart = (e) => {
-    if (e.touches.length === 2) {
-      setIsPinching(true);
-      const distance = getDistance(e.touches[0], e.touches[1]);
-      setInitialDistance(distance);
-      setInitialZoom(zoom);
-    }
-  };
+    const init = async () => {
+      await loadOpenCv();
+      if (!isMounted) return;
+      await startCamera();
+      setReady(true);
+    };
 
-  const handleTouchMove = (e) => {
-    if (isPinching && e.touches.length === 2) {
-      const currentDistance = getDistance(e.touches[0], e.touches[1]);
-      const scale = currentDistance / initialDistance;
-      const newZoom = initialZoom * scale;
-      applyZoom(newZoom);
-    }
-  };
+    init();
 
-  const handleTouchEnd = () => {
-    setIsPinching(false);
-  };
+    return () => {
+      isMounted = false;
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
 
-  const getDistance = (touch1, touch2) => {
-    const dx = touch1.clientX - touch2.clientX;
-    const dy = touch1.clientY - touch2.clientY;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
+  useEffect(() => {
+    if (!ready) return;
+    if (!window.cv || !window.cv.Mat) return;
 
-  const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-
+    const cv = window.cv;
     const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
+    const overlay = overlayRef.current;
+    if (!video || !overlay) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const ctx = overlay.getContext("2d");
 
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    const imageDataUrl = canvas.toDataURL('image/png');
-    setCapturedImage(imageDataUrl);
-  };
+    const processFrame = () => {
+      if (video.readyState < 2) {
+        rafRef.current = requestAnimationFrame(processFrame);
+        return;
+      }
 
-  const downloadPhoto = () => {
-    if (!capturedImage) return;
+      const width = video.videoWidth;
+      const height = video.videoHeight;
+      if (width === 0 || height === 0) {
+        rafRef.current = requestAnimationFrame(processFrame);
+        return;
+      }
 
-    const link = document.createElement('a');
-    link.href = capturedImage;
-    link.download = `photo_${Date.now()}.png`;
-    link.click();
-  };
+      if (overlay.width !== width || overlay.height !== height) {
+        overlay.width = width;
+        overlay.height = height;
+      }
 
-  const retakePhoto = () => {
-    setCapturedImage(null);
-  };
+      const frame = new cv.Mat(height, width, cv.CV_8UC4);
+      const cap = new cv.VideoCapture(video);
+      cap.read(frame);
 
-  const switchCamera = () => {
-    setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
-  };
+      const hsv = new cv.Mat();
+      cv.cvtColor(frame, hsv, cv.COLOR_RGBA2RGB);
+      cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
+
+      // Focus on bottom third of the frame
+      const roiY = Math.floor(height * 2 / 3);
+      const roiHeight = height - roiY;
+      const roiRect = new cv.Rect(0, roiY, width, roiHeight);
+      const roi = hsv.roi(roiRect);
+
+      // Glow mask: bright and saturated
+      const glowLower = new cv.Mat(roi.rows, roi.cols, roi.type(), [0, 80, 200, 0]);
+      const glowUpper = new cv.Mat(roi.rows, roi.cols, roi.type(), [180, 255, 255, 255]);
+      const glowMask = new cv.Mat();
+      cv.inRange(roi, glowLower, glowUpper, glowMask);
+
+      // White core mask: low saturation, very high value
+      const coreLower = new cv.Mat(roi.rows, roi.cols, roi.type(), [0, 0, 230, 0]);
+      const coreUpper = new cv.Mat(roi.rows, roi.cols, roi.type(), [180, 50, 255, 255]);
+      const coreMask = new cv.Mat();
+      cv.inRange(roi, coreLower, coreUpper, coreMask);
+
+      const combined = new cv.Mat();
+      cv.bitwise_or(glowMask, coreMask, combined);
+
+      const contours = new cv.MatVector();
+      const hierarchy = new cv.Mat();
+      cv.findContours(combined, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+      let bestCircle = null;
+      for (let i = 0; i < contours.size(); i += 1) {
+        const contour = contours.get(i);
+        const circle = cv.minEnclosingCircle(contour);
+        const radius = circle.radius;
+        if (radius < 2 || radius > 40) {
+          contour.delete();
+          continue;
+        }
+        if (!bestCircle || radius > bestCircle.radius) {
+          bestCircle = { center: circle.center, radius };
+        }
+        contour.delete();
+      }
+
+      ctx.clearRect(0, 0, width, height);
+
+      if (bestCircle) {
+        const cx = Math.round(bestCircle.center.x);
+        const cy = Math.round(bestCircle.center.y + roiY);
+        const r = Math.round(bestCircle.radius);
+
+        const centerX = clamp(cx, 0, width - 1);
+        const centerY = clamp(cy, 0, height - 1);
+
+        const pixel = frame.ucharPtr(centerY, centerX);
+        const b = pixel[0];
+        const g = pixel[1];
+        const rVal = pixel[2];
+        const hex = rgbToHex(rVal, g, b);
+
+        ctx.strokeStyle = "#00FFB3";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+        ctx.stroke();
+
+        const label = `${hex}`;
+        ctx.font = "18px Arial";
+        ctx.fillStyle = hex;
+        ctx.strokeStyle = "rgba(0,0,0,0.7)";
+        ctx.lineWidth = 4;
+        const textX = Math.min(centerX + r + 10, width - 120);
+        const textY = Math.max(centerY - r, 20);
+        ctx.strokeText(label, textX, textY);
+        ctx.fillText(label, textX, textY);
+
+        ctx.fillStyle = hex;
+        ctx.beginPath();
+        ctx.arc(textX - 12, textY - 6, 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      frame.delete();
+      hsv.delete();
+      roi.delete();
+      glowLower.delete();
+      glowUpper.delete();
+      glowMask.delete();
+      coreLower.delete();
+      coreUpper.delete();
+      coreMask.delete();
+      combined.delete();
+      contours.delete();
+      hierarchy.delete();
+
+      rafRef.current = requestAnimationFrame(processFrame);
+    };
+
+    rafRef.current = requestAnimationFrame(processFrame);
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, [ready]);
 
   return (
     <div className="app">
       {error && <div className="error">{error}</div>}
-      
-      {!capturedImage ? (
-        <div 
-          className="camera-container"        
-               onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-
-        >
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            className="video-feed"
-
-          />
-          
-          <div className="controls">
-            <button className="control-btn" onClick={switchCamera}>
-              🔄
-            </button>
-            
-            <button className="capture-btn" onClick={capturePhoto}>
-              📷
-            </button>
-            
-            <div className="zoom-controls">
-              <button className="zoom-btn" onClick={() => applyZoom(zoom - 0.5)}>
-                -
-              </button>
-              <span className="zoom-level">{zoom.toFixed(1)}x</span>
-              <button className="zoom-btn" onClick={() => applyZoom(zoom + 0.5)}>
-                +
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="preview-container">
-          <img src={capturedImage} alt="Captured" className="captured-image" />
-          
-          <div className="preview-controls">
-            <button className="preview-btn" onClick={retakePhoto}>
-              Retake
-            </button>
-            <button className="preview-btn download" onClick={downloadPhoto}>
-              Download
-            </button>
-          </div>
-        </div>
-      )}
-
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
+      <div className="camera-container">
+        <video ref={videoRef} className="video-feed" playsInline muted />
+        <canvas ref={overlayRef} className="video-feed" />
+      </div>
     </div>
   );
 }
-
-export default App;
